@@ -1,0 +1,11 @@
+{
+  "domain": "climate_sync",
+  "name": "Climate Sync",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/yourusername/climate_sync",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "requirements": [],
+  "version": "1.0.0"
+}
