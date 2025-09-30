@@ -20,9 +20,11 @@ from .const import (
     CONF_ENABLE_TEMP_OFFSET,
     CONF_ENABLE_BOOST_MODE,
     CONF_OFFSET_SENSITIVITY,
+    CONF_SYNC_INTERVAL,
     DEFAULT_ENABLE_TEMP_OFFSET,
     DEFAULT_ENABLE_BOOST_MODE,
     DEFAULT_OFFSET_SENSITIVITY,
+    DEFAULT_SYNC_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,6 +56,7 @@ class ClimateSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input.setdefault(CONF_ENABLE_TEMP_OFFSET, DEFAULT_ENABLE_TEMP_OFFSET)
                 user_input.setdefault(CONF_ENABLE_BOOST_MODE, DEFAULT_ENABLE_BOOST_MODE)
                 user_input.setdefault(CONF_OFFSET_SENSITIVITY, DEFAULT_OFFSET_SENSITIVITY)
+                user_input.setdefault(CONF_SYNC_INTERVAL, DEFAULT_SYNC_INTERVAL)
 
                 return self.async_create_entry(
                     title=f"{user_input[CONF_SOURCE_CLIMATE]} → {user_input[CONF_TARGET_CLIMATE]}",
@@ -84,6 +87,18 @@ class ClimateSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         min=0.1,
                         max=5.0,
                         step=0.1,
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_SYNC_INTERVAL,
+                    default=DEFAULT_SYNC_INTERVAL,
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=60,
+                        step=1,
+                        unit_of_measurement="minutes",
                         mode=selector.NumberSelectorMode.BOX,
                     )
                 ),
@@ -119,23 +134,26 @@ class ClimateSyncOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
+        # Get current values from options or fall back to data
+        current_values = {**self.config_entry.data, **self.config_entry.options}
+
         data_schema = vol.Schema(
             {
                 vol.Optional(
                     CONF_ENABLE_TEMP_OFFSET,
-                    default=self.config_entry.data.get(
+                    default=current_values.get(
                         CONF_ENABLE_TEMP_OFFSET, DEFAULT_ENABLE_TEMP_OFFSET
                     ),
                 ): selector.BooleanSelector(),
                 vol.Optional(
                     CONF_ENABLE_BOOST_MODE,
-                    default=self.config_entry.data.get(
+                    default=current_values.get(
                         CONF_ENABLE_BOOST_MODE, DEFAULT_ENABLE_BOOST_MODE
                     ),
                 ): selector.BooleanSelector(),
                 vol.Optional(
                     CONF_OFFSET_SENSITIVITY,
-                    default=self.config_entry.data.get(
+                    default=current_values.get(
                         CONF_OFFSET_SENSITIVITY, DEFAULT_OFFSET_SENSITIVITY
                     ),
                 ): selector.NumberSelector(
@@ -143,6 +161,20 @@ class ClimateSyncOptionsFlow(config_entries.OptionsFlow):
                         min=0.1,
                         max=5.0,
                         step=0.1,
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Optional(
+                    CONF_SYNC_INTERVAL,
+                    default=current_values.get(
+                        CONF_SYNC_INTERVAL, DEFAULT_SYNC_INTERVAL
+                    ),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=60,
+                        step=1,
+                        unit_of_measurement="minutes",
                         mode=selector.NumberSelectorMode.BOX,
                     )
                 ),

@@ -9,14 +9,16 @@
           "target_climate": "Target Climate Entity",
           "enable_temp_offset": "Enable Temperature Offset Compensation",
           "enable_boost_mode": "Enable Boost Mode (max fan/extreme temp when actively heating/cooling)",
-          "offset_sensitivity": "Temperature Offset Sensitivity Multiplier"
+          "offset_sensitivity": "Temperature Offset Sensitivity Multiplier",
+          "sync_interval": "Periodic Sync Interval"
         },
         "data_description": {
           "source_climate": "The climate entity that will control the target (e.g., your Nest thermostat)",
           "target_climate": "The climate entity to be controlled (e.g., your Kumo Cloud unit)",
           "enable_temp_offset": "Adjusts target setpoint based on temperature difference between source and target sensors",
           "enable_boost_mode": "When source is actively heating/cooling, sets target to max fan speed and extreme temperature",
-          "offset_sensitivity": "How aggressively to compensate for temperature differences (1.0 = 1:1, higher = more aggressive)"
+          "offset_sensitivity": "How aggressively to compensate for temperature differences (1.0 = 1:1, higher = more aggressive)",
+          "sync_interval": "How often to check and re-sync (in minutes) to ensure target stays in sync"
         }
       }
     },
@@ -35,7 +37,8 @@
         "data": {
           "enable_temp_offset": "Enable Temperature Offset Compensation",
           "enable_boost_mode": "Enable Boost Mode",
-          "offset_sensitivity": "Temperature Offset Sensitivity Multiplier"
+          "offset_sensitivity": "Temperature Offset Sensitivity Multiplier",
+          "sync_interval": "Periodic Sync Interval"
         }
       }
     }
