@@ -282,6 +282,8 @@ class ClimateSyncManager:
                     source_target_temp_high,
                     source_temp,
                     target_temp,
+                    target_min_temp,
+                    target_max_temp,
                 )
 
             _LOGGER.debug("Sync operation completed successfully")
@@ -413,6 +415,8 @@ class ClimateSyncManager:
         source_target_temp_high: float | None,
         source_temp: float | None,
         target_temp: float | None,
+        target_min_temp: float,
+        target_max_temp: float,
     ) -> None:
         """Sync normal mode: match HVAC mode and temperature with optional offset."""
         # Restore saved settings if exiting boost mode
@@ -504,10 +508,51 @@ class ClimateSyncManager:
 
         if source_hvac_mode == HVACMode.HEAT_COOL:
             # Auto mode: use both low and high temps
+            temp_low = None
+            temp_high = None
+
             if source_target_temp_low is not None:
-                service_data["target_temp_low"] = source_target_temp_low + temp_offset
+                calculated_low = source_target_temp_low + temp_offset
+                temp_low = max(target_min_temp, min(target_max_temp, calculated_low))
+                if temp_low != calculated_low:
+                    _LOGGER.warning(
+                        "Clamped target_temp_low from %.1f to %.1f (range: %.1f-%.1f)",
+                        calculated_low,
+                        temp_low,
+                        target_min_temp,
+                        target_max_temp,
+                    )
+
             if source_target_temp_high is not None:
-                service_data["target_temp_high"] = source_target_temp_high + temp_offset
+                calculated_high = source_target_temp_high + temp_offset
+                temp_high = max(target_min_temp, min(target_max_temp, calculated_high))
+                if temp_high != calculated_high:
+                    _LOGGER.warning(
+                        "Clamped target_temp_high from %.1f to %.1f (range: %.1f-%.1f)",
+                        calculated_high,
+                        temp_high,
+                        target_min_temp,
+                        target_max_temp,
+                    )
+
+            # Ensure low <= high if both are set
+            if temp_low is not None and temp_high is not None:
+                if temp_low > temp_high:
+                    _LOGGER.warning(
+                        "Auto mode: low temp (%.1f) > high temp (%.1f), adjusting to ensure low <= high",
+                        temp_low,
+                        temp_high,
+                    )
+                    # Swap them to maintain valid range
+                    temp_low, temp_high = temp_high, temp_low
+
+                service_data["target_temp_low"] = temp_low
+                service_data["target_temp_high"] = temp_high
+            elif temp_low is not None:
+                service_data["target_temp_low"] = temp_low
+            elif temp_high is not None:
+                service_data["target_temp_high"] = temp_high
+
             _LOGGER.info(
                 "Setting auto mode temps: low=%s, high=%s",
                 service_data.get("target_temp_low"),
@@ -515,7 +560,17 @@ class ClimateSyncManager:
             )
         elif source_target_temp is not None:
             # Single setpoint modes (heat, cool)
-            service_data[ATTR_TEMPERATURE] = source_target_temp + temp_offset
+            calculated_temp = source_target_temp + temp_offset
+            clamped_temp = max(target_min_temp, min(target_max_temp, calculated_temp))
+            service_data[ATTR_TEMPERATURE] = clamped_temp
+            if clamped_temp != calculated_temp:
+                _LOGGER.warning(
+                    "Clamped temperature from %.1f to %.1f (range: %.1f-%.1f)",
+                    calculated_temp,
+                    clamped_temp,
+                    target_min_temp,
+                    target_max_temp,
+                )
             _LOGGER.info(
                 "Setting target temp: %s (source: %s, offset: %.1f)",
                 service_data[ATTR_TEMPERATURE],
