@@ -489,11 +489,16 @@ class ClimateSyncManager:
             and target_temp is not None
         ):
             temp_offset = (source_temp - target_temp) * self.offset_sensitivity
+            # Get temperature unit from Home Assistant config
+            temp_unit = self.hass.config.units.temperature_unit
             _LOGGER.info(
-                "Temperature offset: %.1f°C (source: %.1f°C, target: %.1f°C, sensitivity: %.1f)",
+                "Temperature offset: %.1f%s (source: %.1f%s, target: %.1f%s, sensitivity: %.1f)",
                 temp_offset,
+                temp_unit,
                 source_temp,
+                temp_unit,
                 target_temp,
+                temp_unit,
                 self.offset_sensitivity,
             )
         elif self.enable_temp_offset:
@@ -506,6 +511,9 @@ class ClimateSyncManager:
         # Sync temperature setpoints
         service_data: dict[str, Any] = {ATTR_ENTITY_ID: self.target_entity}
 
+        # Get temperature unit for logging
+        temp_unit = self.hass.config.units.temperature_unit
+
         if source_hvac_mode == HVACMode.HEAT_COOL:
             # Auto mode: use both low and high temps
             temp_low = None
@@ -516,11 +524,14 @@ class ClimateSyncManager:
                 temp_low = max(target_min_temp, min(target_max_temp, calculated_low))
                 if temp_low != calculated_low:
                     _LOGGER.warning(
-                        "Clamped target_temp_low from %.1f to %.1f (range: %.1f-%.1f)",
+                        "Clamped target_temp_low from %.1f%s to %.1f%s (range: %.1f-%.1f%s)",
                         calculated_low,
+                        temp_unit,
                         temp_low,
+                        temp_unit,
                         target_min_temp,
                         target_max_temp,
+                        temp_unit,
                     )
 
             if source_target_temp_high is not None:
@@ -528,20 +539,25 @@ class ClimateSyncManager:
                 temp_high = max(target_min_temp, min(target_max_temp, calculated_high))
                 if temp_high != calculated_high:
                     _LOGGER.warning(
-                        "Clamped target_temp_high from %.1f to %.1f (range: %.1f-%.1f)",
+                        "Clamped target_temp_high from %.1f%s to %.1f%s (range: %.1f-%.1f%s)",
                         calculated_high,
+                        temp_unit,
                         temp_high,
+                        temp_unit,
                         target_min_temp,
                         target_max_temp,
+                        temp_unit,
                     )
 
             # Ensure low <= high if both are set
             if temp_low is not None and temp_high is not None:
                 if temp_low > temp_high:
                     _LOGGER.warning(
-                        "Auto mode: low temp (%.1f) > high temp (%.1f), adjusting to ensure low <= high",
+                        "Auto mode: low temp (%.1f%s) > high temp (%.1f%s), adjusting to ensure low <= high",
                         temp_low,
+                        temp_unit,
                         temp_high,
+                        temp_unit,
                     )
                     # Swap them to maintain valid range
                     temp_low, temp_high = temp_high, temp_low
@@ -565,17 +581,23 @@ class ClimateSyncManager:
             service_data[ATTR_TEMPERATURE] = clamped_temp
             if clamped_temp != calculated_temp:
                 _LOGGER.warning(
-                    "Clamped temperature from %.1f to %.1f (range: %.1f-%.1f)",
+                    "Clamped temperature from %.1f%s to %.1f%s (range: %.1f-%.1f%s)",
                     calculated_temp,
+                    temp_unit,
                     clamped_temp,
+                    temp_unit,
                     target_min_temp,
                     target_max_temp,
+                    temp_unit,
                 )
             _LOGGER.info(
-                "Setting target temp: %s (source: %s, offset: %.1f)",
+                "Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s)",
                 service_data[ATTR_TEMPERATURE],
+                temp_unit,
                 source_target_temp,
+                temp_unit,
                 temp_offset,
+                temp_unit,
             )
         else:
             _LOGGER.debug("No temperature setpoint available from source")
