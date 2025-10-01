@@ -245,16 +245,25 @@ class ClimateSyncManager:
             target_temp = target_state.attributes.get("current_temperature")
             target_min_temp = target_state.attributes.get("min_temp", 16)
             target_max_temp = target_state.attributes.get("max_temp", 30)
+            # Get separate heat/cool ranges if available
+            target_min_heat_temp = target_state.attributes.get("min_heat_temp", target_min_temp)
+            target_max_heat_temp = target_state.attributes.get("max_heat_temp", target_max_temp)
+            target_min_cool_temp = target_state.attributes.get("min_cool_temp", target_min_temp)
+            target_max_cool_temp = target_state.attributes.get("max_cool_temp", target_max_temp)
             target_fan_modes = target_state.attributes.get("fan_modes", [])
             target_swing_modes = target_state.attributes.get("swing_modes", [])
 
             _LOGGER.debug(
-                "[%s] Target state: mode=%s, current_temp=%s, min=%s, max=%s, fan_modes=%s, swing_modes=%s",
+                "[%s] Target state: mode=%s, current_temp=%s, min=%s, max=%s, heat_range=%s-%s, cool_range=%s-%s, fan_modes=%s, swing_modes=%s",
                 self.target_entity,
                 target_state.state,
                 target_temp,
                 target_min_temp,
                 target_max_temp,
+                target_min_heat_temp,
+                target_max_heat_temp,
+                target_min_cool_temp,
+                target_max_cool_temp,
                 target_fan_modes,
                 target_swing_modes,
             )
@@ -362,6 +371,10 @@ class ClimateSyncManager:
                     target_temp,
                     target_min_temp,
                     target_max_temp,
+                    target_min_heat_temp,
+                    target_max_heat_temp,
+                    target_min_cool_temp,
+                    target_max_cool_temp,
                 )
 
             _LOGGER.debug("[%s → %s] Sync operation completed successfully", self.source_entity, self.target_entity)
@@ -499,6 +512,10 @@ class ClimateSyncManager:
         target_temp: float | None,
         target_min_temp: float,
         target_max_temp: float,
+        target_min_heat_temp: float,
+        target_max_heat_temp: float,
+        target_min_cool_temp: float,
+        target_max_cool_temp: float,
     ) -> None:
         """Sync normal mode: match HVAC mode and temperature with optional offset."""
         # Restore saved settings if exiting boost mode
@@ -607,31 +624,33 @@ class ClimateSyncManager:
 
             if source_target_temp_low is not None:
                 calculated_low = source_target_temp_low + temp_offset
-                temp_low = max(target_min_temp, min(target_max_temp, calculated_low))
+                # Use heat range for low temp (heating setpoint)
+                temp_low = max(target_min_heat_temp, min(target_max_heat_temp, calculated_low))
                 if temp_low != calculated_low:
                     _LOGGER.warning(
-                        "Clamped target_temp_low from %.1f%s to %.1f%s (range: %.1f-%.1f%s)",
+                        "Clamped target_temp_low from %.1f%s to %.1f%s (heat range: %.1f-%.1f%s)",
                         calculated_low,
                         temp_unit,
                         temp_low,
                         temp_unit,
-                        target_min_temp,
-                        target_max_temp,
+                        target_min_heat_temp,
+                        target_max_heat_temp,
                         temp_unit,
                     )
 
             if source_target_temp_high is not None:
                 calculated_high = source_target_temp_high + temp_offset
-                temp_high = max(target_min_temp, min(target_max_temp, calculated_high))
+                # Use cool range for high temp (cooling setpoint)
+                temp_high = max(target_min_cool_temp, min(target_max_cool_temp, calculated_high))
                 if temp_high != calculated_high:
                     _LOGGER.warning(
-                        "Clamped target_temp_high from %.1f%s to %.1f%s (range: %.1f-%.1f%s)",
+                        "Clamped target_temp_high from %.1f%s to %.1f%s (cool range: %.1f-%.1f%s)",
                         calculated_high,
                         temp_unit,
                         temp_high,
                         temp_unit,
-                        target_min_temp,
-                        target_max_temp,
+                        target_min_cool_temp,
+                        target_max_cool_temp,
                         temp_unit,
                     )
 
