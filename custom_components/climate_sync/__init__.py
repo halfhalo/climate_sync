@@ -168,7 +168,7 @@ class ClimateSyncManager:
     def async_source_changed(self, event: Event) -> None:
         """Handle state changes from the source climate entity."""
         if self._syncing:
-            _LOGGER.debug("Sync already in progress, skipping")
+            _LOGGER.debug("[%s] Sync already in progress, skipping", self.source_entity)
             return
 
         new_state = event.data.get("new_state")
@@ -176,13 +176,15 @@ class ClimateSyncManager:
 
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             _LOGGER.debug(
-                "Source state unavailable or unknown: %s",
+                "[%s] Source state unavailable or unknown: %s",
+                self.source_entity,
                 new_state.state if new_state else "None",
             )
             return
 
         _LOGGER.info(
-            "Source state changed: %s → %s (action: %s)",
+            "[%s] Source state changed: %s → %s (action: %s)",
+            self.source_entity,
             old_state.state if old_state else "unknown",
             new_state.state,
             new_state.attributes.get("hvac_action", "unknown"),
@@ -194,11 +196,11 @@ class ClimateSyncManager:
     async def async_sync_state(self) -> None:
         """Synchronize the target climate entity with the source."""
         if self._syncing:
-            _LOGGER.debug("Sync already in progress, skipping")
+            _LOGGER.debug("[%s → %s] Sync already in progress, skipping", self.source_entity, self.target_entity)
             return
 
         self._syncing = True
-        _LOGGER.debug("Starting sync operation")
+        _LOGGER.debug("[%s → %s] Starting sync operation", self.source_entity, self.target_entity)
 
         try:
             source_state = self.hass.states.get(self.source_entity)
@@ -206,7 +208,9 @@ class ClimateSyncManager:
 
             if not source_state or not target_state:
                 _LOGGER.warning(
-                    "Source or target entity not found: source=%s (found=%s), target=%s (found=%s)",
+                    "[%s → %s] Source or target entity not found: source=%s (found=%s), target=%s (found=%s)",
+                    self.source_entity,
+                    self.target_entity,
                     self.source_entity,
                     source_state is not None,
                     self.target_entity,
@@ -215,7 +219,7 @@ class ClimateSyncManager:
                 return
 
             if source_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-                _LOGGER.debug("Source entity unavailable, skipping sync")
+                _LOGGER.debug("[%s → %s] Source entity unavailable, skipping sync", self.source_entity, self.target_entity)
                 return
 
             # Get source properties
@@ -227,7 +231,8 @@ class ClimateSyncManager:
             source_target_temp_high = source_state.attributes.get("target_temp_high")
 
             _LOGGER.debug(
-                "Source state: mode=%s, action=%s, current_temp=%s, target_temp=%s, low=%s, high=%s",
+                "[%s] Source state: mode=%s, action=%s, current_temp=%s, target_temp=%s, low=%s, high=%s",
+                self.source_entity,
                 source_hvac_mode,
                 source_hvac_action,
                 source_temp,
@@ -244,7 +249,8 @@ class ClimateSyncManager:
             target_swing_modes = target_state.attributes.get("swing_modes", [])
 
             _LOGGER.debug(
-                "Target state: mode=%s, current_temp=%s, min=%s, max=%s, fan_modes=%s, swing_modes=%s",
+                "[%s] Target state: mode=%s, current_temp=%s, min=%s, max=%s, fan_modes=%s, swing_modes=%s",
+                self.target_entity,
                 target_state.state,
                 target_temp,
                 target_min_temp,
@@ -265,14 +271,15 @@ class ClimateSyncManager:
                 if self._heating_cooling_start_time is None:
                     self._heating_cooling_start_time = now
                     _LOGGER.info(
-                        "Source started heating/cooling at %s, will activate boost after %d minutes",
+                        "[%s] Source started heating/cooling at %s, will activate boost after %d minutes",
+                        self.source_entity,
                         self._heating_cooling_start_time,
                         BOOST_ACTIVATION_DELAY,
                     )
             else:
                 # Reset timer when not actively heating/cooling
                 if self._heating_cooling_start_time is not None:
-                    _LOGGER.info("Source stopped heating/cooling, resetting activation timer")
+                    _LOGGER.info("[%s] Source stopped heating/cooling, resetting activation timer", self.source_entity)
                 self._heating_cooling_start_time = None
 
             # Determine if we should activate boost mode
@@ -283,13 +290,17 @@ class ClimateSyncManager:
                     if elapsed_minutes >= BOOST_ACTIVATION_DELAY:
                         should_activate_boost = True
                         _LOGGER.debug(
-                            "Boost activation: %.1f minutes elapsed, threshold is %d minutes",
+                            "[%s → %s] Boost activation: %.1f minutes elapsed, threshold is %d minutes",
+                            self.source_entity,
+                            self.target_entity,
                             elapsed_minutes,
                             BOOST_ACTIVATION_DELAY,
                         )
                     else:
                         _LOGGER.debug(
-                            "Boost activation: waiting %.1f more minutes (%.1f/%d elapsed)",
+                            "[%s → %s] Boost activation: waiting %.1f more minutes (%.1f/%d elapsed)",
+                            self.source_entity,
+                            self.target_entity,
                             BOOST_ACTIVATION_DELAY - elapsed_minutes,
                             elapsed_minutes,
                             BOOST_ACTIVATION_DELAY,
@@ -302,20 +313,26 @@ class ClimateSyncManager:
                 if boost_elapsed_minutes < BOOST_MINIMUM_RUNTIME:
                     can_exit_boost = False
                     _LOGGER.debug(
-                        "Boost mode: must stay active for %.1f more minutes (%.1f/%d elapsed)",
+                        "[%s → %s] Boost mode: must stay active for %.1f more minutes (%.1f/%d elapsed)",
+                        self.source_entity,
+                        self.target_entity,
                         BOOST_MINIMUM_RUNTIME - boost_elapsed_minutes,
                         boost_elapsed_minutes,
                         BOOST_MINIMUM_RUNTIME,
                     )
                 else:
                     _LOGGER.debug(
-                        "Boost mode: minimum runtime satisfied (%.1f/%d minutes)",
+                        "[%s → %s] Boost mode: minimum runtime satisfied (%.1f/%d minutes)",
+                        self.source_entity,
+                        self.target_entity,
                         boost_elapsed_minutes,
                         BOOST_MINIMUM_RUNTIME,
                     )
 
             _LOGGER.debug(
-                "Boost mode decision: enabled=%s, actively_heating_cooling=%s, should_activate=%s, can_exit=%s, boost_active=%s",
+                "[%s → %s] Boost mode decision: enabled=%s, actively_heating_cooling=%s, should_activate=%s, can_exit=%s, boost_active=%s",
+                self.source_entity,
+                self.target_entity,
                 self.enable_boost_mode,
                 is_actively_heating_or_cooling,
                 should_activate_boost,
@@ -324,7 +341,7 @@ class ClimateSyncManager:
             )
 
             if should_activate_boost or (self._boost_active and not can_exit_boost):
-                _LOGGER.info("Activating/maintaining boost mode for %s", source_hvac_action)
+                _LOGGER.info("[%s → %s] Activating/maintaining boost mode for %s", self.source_entity, self.target_entity, source_hvac_action)
                 await self._async_activate_boost_mode(
                     source_hvac_action,
                     target_state,
@@ -334,7 +351,7 @@ class ClimateSyncManager:
                     target_swing_modes,
                 )
             else:
-                _LOGGER.info("Syncing in normal mode")
+                _LOGGER.info("[%s → %s] Syncing in normal mode", self.source_entity, self.target_entity)
                 # Normal sync mode (or exiting boost mode)
                 await self._async_sync_normal_mode(
                     source_hvac_mode,
@@ -347,7 +364,7 @@ class ClimateSyncManager:
                     target_max_temp,
                 )
 
-            _LOGGER.debug("Sync operation completed successfully")
+            _LOGGER.debug("[%s → %s] Sync operation completed successfully", self.source_entity, self.target_entity)
 
         except Exception as e:
             _LOGGER.exception("Error syncing climate state: %s", e)
@@ -370,7 +387,8 @@ class ClimateSyncManager:
             self._saved_swing_mode = target_state.attributes.get("swing_mode")
             self._boost_start_time = datetime.now()
             _LOGGER.info(
-                "Entering boost mode at %s - saved fan_mode: %s, swing_mode: %s (minimum runtime: %d minutes)",
+                "[%s] Entering boost mode at %s - saved fan_mode: %s, swing_mode: %s (minimum runtime: %d minutes)",
+                self.target_entity,
                 self._boost_start_time,
                 self._saved_fan_mode,
                 self._saved_swing_mode,
@@ -387,7 +405,7 @@ class ClimateSyncManager:
             hvac_mode = HVACMode.COOL
 
         _LOGGER.info(
-            "Boost mode: setting %s to mode=%s, temp=%s",
+            "[%s] Boost mode: setting mode=%s, temp=%s",
             self.target_entity,
             hvac_mode,
             boost_temp,
@@ -486,7 +504,8 @@ class ClimateSyncManager:
         # Restore saved settings if exiting boost mode
         if self._boost_active:
             _LOGGER.info(
-                "Exiting boost mode - restoring fan_mode: %s, swing_mode: %s",
+                "[%s] Exiting boost mode - restoring fan_mode: %s, swing_mode: %s",
+                self.target_entity,
                 self._saved_fan_mode,
                 self._saved_swing_mode,
             )
@@ -530,7 +549,7 @@ class ClimateSyncManager:
             self._boost_start_time = None
 
         # Sync HVAC mode
-        _LOGGER.info("Setting HVAC mode to %s", source_hvac_mode)
+        _LOGGER.info("[%s] Setting HVAC mode to %s", self.target_entity, source_hvac_mode)
         try:
             await self.hass.services.async_call(
                 CLIMATE_DOMAIN,
@@ -557,7 +576,9 @@ class ClimateSyncManager:
             # Get temperature unit from Home Assistant config
             temp_unit = self.hass.config.units.temperature_unit
             _LOGGER.info(
-                "Temperature offset: %.1f%s (source: %.1f%s, target: %.1f%s, sensitivity: %.1f)",
+                "[%s → %s] Temperature offset: %.1f%s (source: %.1f%s, target: %.1f%s, sensitivity: %.1f)",
+                self.source_entity,
+                self.target_entity,
                 temp_offset,
                 temp_unit,
                 source_temp,
@@ -635,7 +656,8 @@ class ClimateSyncManager:
                 service_data["target_temp_high"] = temp_high
 
             _LOGGER.info(
-                "Setting auto mode temps: low=%s, high=%s",
+                "[%s] Setting auto mode temps: low=%s, high=%s",
+                self.target_entity,
                 service_data.get("target_temp_low"),
                 service_data.get("target_temp_high"),
             )
@@ -656,7 +678,8 @@ class ClimateSyncManager:
                     temp_unit,
                 )
             _LOGGER.info(
-                "Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s)",
+                "[%s] Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s)",
+                self.target_entity,
                 service_data[ATTR_TEMPERATURE],
                 temp_unit,
                 source_target_temp,
