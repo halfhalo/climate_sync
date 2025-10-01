@@ -443,7 +443,7 @@ class ClimateSyncManager:
             raise
 
         # Set fan to max if available
-        max_fan_modes = ["powerful", "high", "auto"]
+        max_fan_modes = ["superPowerful", "powerful", "high", "medium", "low", "auto"]
         selected_fan = None
         for fan_mode in max_fan_modes:
             if fan_mode in target_fan_modes:
