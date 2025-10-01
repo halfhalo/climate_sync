@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -35,6 +35,8 @@ from .const import (
     CONF_OFFSET_SENSITIVITY,
     CONF_SYNC_INTERVAL,
     DEFAULT_SYNC_INTERVAL,
+    BOOST_ACTIVATION_DELAY,
+    BOOST_MINIMUM_RUNTIME,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -159,6 +161,8 @@ class ClimateSyncManager:
         self._boost_active = False  # Track if boost mode is active
         self._saved_fan_mode: str | None = None  # Save fan mode before boost
         self._saved_swing_mode: str | None = None  # Save swing mode before boost
+        self._heating_cooling_start_time: datetime | None = None  # When heating/cooling started
+        self._boost_start_time: datetime | None = None  # When boost mode started
 
     @callback
     def async_source_changed(self, event: Event) -> None:
@@ -255,15 +259,72 @@ class ClimateSyncManager:
                 HVACAction.COOLING,
             )
 
+            # Track heating/cooling start time
+            now = datetime.now()
+            if is_actively_heating_or_cooling:
+                if self._heating_cooling_start_time is None:
+                    self._heating_cooling_start_time = now
+                    _LOGGER.info(
+                        "Source started heating/cooling at %s, will activate boost after %d minutes",
+                        self._heating_cooling_start_time,
+                        BOOST_ACTIVATION_DELAY,
+                    )
+            else:
+                # Reset timer when not actively heating/cooling
+                if self._heating_cooling_start_time is not None:
+                    _LOGGER.info("Source stopped heating/cooling, resetting activation timer")
+                self._heating_cooling_start_time = None
+
+            # Determine if we should activate boost mode
+            should_activate_boost = False
+            if self.enable_boost_mode and is_actively_heating_or_cooling:
+                if self._heating_cooling_start_time is not None:
+                    elapsed_minutes = (now - self._heating_cooling_start_time).total_seconds() / 60
+                    if elapsed_minutes >= BOOST_ACTIVATION_DELAY:
+                        should_activate_boost = True
+                        _LOGGER.debug(
+                            "Boost activation: %.1f minutes elapsed, threshold is %d minutes",
+                            elapsed_minutes,
+                            BOOST_ACTIVATION_DELAY,
+                        )
+                    else:
+                        _LOGGER.debug(
+                            "Boost activation: waiting %.1f more minutes (%.1f/%d elapsed)",
+                            BOOST_ACTIVATION_DELAY - elapsed_minutes,
+                            elapsed_minutes,
+                            BOOST_ACTIVATION_DELAY,
+                        )
+
+            # Check if we should exit boost mode (must stay in boost for minimum runtime)
+            can_exit_boost = True
+            if self._boost_active and self._boost_start_time is not None:
+                boost_elapsed_minutes = (now - self._boost_start_time).total_seconds() / 60
+                if boost_elapsed_minutes < BOOST_MINIMUM_RUNTIME:
+                    can_exit_boost = False
+                    _LOGGER.debug(
+                        "Boost mode: must stay active for %.1f more minutes (%.1f/%d elapsed)",
+                        BOOST_MINIMUM_RUNTIME - boost_elapsed_minutes,
+                        boost_elapsed_minutes,
+                        BOOST_MINIMUM_RUNTIME,
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Boost mode: minimum runtime satisfied (%.1f/%d minutes)",
+                        boost_elapsed_minutes,
+                        BOOST_MINIMUM_RUNTIME,
+                    )
+
             _LOGGER.debug(
-                "Boost mode check: enabled=%s, actively_heating_cooling=%s, action=%s",
+                "Boost mode decision: enabled=%s, actively_heating_cooling=%s, should_activate=%s, can_exit=%s, boost_active=%s",
                 self.enable_boost_mode,
                 is_actively_heating_or_cooling,
-                source_hvac_action,
+                should_activate_boost,
+                can_exit_boost,
+                self._boost_active,
             )
 
-            if self.enable_boost_mode and is_actively_heating_or_cooling:
-                _LOGGER.info("Activating boost mode for %s", source_hvac_action)
+            if should_activate_boost or (self._boost_active and not can_exit_boost):
+                _LOGGER.info("Activating/maintaining boost mode for %s", source_hvac_action)
                 await self._async_activate_boost_mode(
                     source_hvac_action,
                     target_state,
@@ -307,10 +368,13 @@ class ClimateSyncManager:
         if not self._boost_active:
             self._saved_fan_mode = target_state.attributes.get("fan_mode")
             self._saved_swing_mode = target_state.attributes.get("swing_mode")
+            self._boost_start_time = datetime.now()
             _LOGGER.info(
-                "Entering boost mode - saved fan_mode: %s, swing_mode: %s",
+                "Entering boost mode at %s - saved fan_mode: %s, swing_mode: %s (minimum runtime: %d minutes)",
+                self._boost_start_time,
                 self._saved_fan_mode,
                 self._saved_swing_mode,
+                BOOST_MINIMUM_RUNTIME,
             )
             self._boost_active = True
 
@@ -463,6 +527,7 @@ class ClimateSyncManager:
             self._boost_active = False
             self._saved_fan_mode = None
             self._saved_swing_mode = None
+            self._boost_start_time = None
 
         # Sync HVAC mode
         _LOGGER.info("Setting HVAC mode to %s", source_hvac_mode)

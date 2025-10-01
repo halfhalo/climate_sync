@@ -15,3 +15,7 @@ DEFAULT_ENABLE_TEMP_OFFSET = True
 DEFAULT_ENABLE_BOOST_MODE = True
 DEFAULT_OFFSET_SENSITIVITY = 1.0
 DEFAULT_SYNC_INTERVAL = 5  # minutes
+
+# Boost mode timing
+BOOST_ACTIVATION_DELAY = 15  # minutes - how long to wait before activating boost
+BOOST_MINIMUM_RUNTIME = 10  # minutes - minimum time to stay in boost mode
