@@ -362,6 +362,11 @@ class ClimateSyncManager:
             else:
                 _LOGGER.info("[%s → %s] Syncing in normal mode", self.source_entity, self.target_entity)
                 # Normal sync mode (or exiting boost mode)
+                # Get current target setpoints for logging
+                current_target_temp_low = target_state.attributes.get("target_temp_low")
+                current_target_temp_high = target_state.attributes.get("target_temp_high")
+                current_target_temp = target_state.attributes.get("temperature")
+
                 await self._async_sync_normal_mode(
                     source_hvac_mode,
                     source_target_temp,
@@ -375,6 +380,9 @@ class ClimateSyncManager:
                     target_max_heat_temp,
                     target_min_cool_temp,
                     target_max_cool_temp,
+                    current_target_temp_low,
+                    current_target_temp_high,
+                    current_target_temp,
                 )
 
             _LOGGER.debug("[%s → %s] Sync operation completed successfully", self.source_entity, self.target_entity)
@@ -516,6 +524,9 @@ class ClimateSyncManager:
         target_max_heat_temp: float,
         target_min_cool_temp: float,
         target_max_cool_temp: float,
+        current_target_temp_low: float | None,
+        current_target_temp_high: float | None,
+        current_target_temp: float | None,
     ) -> None:
         """Sync normal mode: match HVAC mode and temperature with optional offset."""
         # Restore saved settings if exiting boost mode
@@ -675,10 +686,12 @@ class ClimateSyncManager:
                 service_data["target_temp_high"] = temp_high
 
             _LOGGER.info(
-                "[%s] Setting auto mode temps: low=%s, high=%s",
+                "[%s] Setting auto mode temps: low=%s, high=%s (current: low=%s, high=%s)",
                 self.target_entity,
                 service_data.get("target_temp_low"),
                 service_data.get("target_temp_high"),
+                current_target_temp_low,
+                current_target_temp_high,
             )
         elif source_target_temp is not None:
             # Single setpoint modes (heat, cool)
@@ -697,7 +710,7 @@ class ClimateSyncManager:
                     temp_unit,
                 )
             _LOGGER.info(
-                "[%s] Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s)",
+                "[%s] Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s, current: %s)",
                 self.target_entity,
                 service_data[ATTR_TEMPERATURE],
                 temp_unit,
@@ -705,6 +718,7 @@ class ClimateSyncManager:
                 temp_unit,
                 temp_offset,
                 temp_unit,
+                current_target_temp,
             )
         else:
             _LOGGER.debug("No temperature setpoint available from source")
