@@ -362,7 +362,8 @@ class ClimateSyncManager:
             else:
                 _LOGGER.info("[%s → %s] Syncing in normal mode", self.source_entity, self.target_entity)
                 # Normal sync mode (or exiting boost mode)
-                # Get current target setpoints for logging
+                # Get current target state for comparison
+                current_target_hvac_mode = target_state.state
                 current_target_temp_low = target_state.attributes.get("target_temp_low")
                 current_target_temp_high = target_state.attributes.get("target_temp_high")
                 current_target_temp = target_state.attributes.get("temperature")
@@ -380,6 +381,7 @@ class ClimateSyncManager:
                     target_max_heat_temp,
                     target_min_cool_temp,
                     target_max_cool_temp,
+                    current_target_hvac_mode,
                     current_target_temp_low,
                     current_target_temp_high,
                     current_target_temp,
@@ -524,6 +526,7 @@ class ClimateSyncManager:
         target_max_heat_temp: float,
         target_min_cool_temp: float,
         target_max_cool_temp: float,
+        current_target_hvac_mode: str,
         current_target_temp_low: float | None,
         current_target_temp_high: float | None,
         current_target_temp: float | None,
@@ -577,21 +580,33 @@ class ClimateSyncManager:
             self._boost_start_time = None
 
         # Sync HVAC mode
-        _LOGGER.info("[%s] Setting HVAC mode to %s", self.target_entity, source_hvac_mode)
-        try:
-            await self.hass.services.async_call(
-                CLIMATE_DOMAIN,
-                SERVICE_SET_HVAC_MODE,
-                {
-                    ATTR_ENTITY_ID: self.target_entity,
-                    ATTR_HVAC_MODE: source_hvac_mode,
-                },
-                blocking=True,
+        if source_hvac_mode == current_target_hvac_mode:
+            _LOGGER.debug(
+                "[%s] HVAC mode unchanged: %s - skipping update",
+                self.target_entity,
+                source_hvac_mode,
             )
-            _LOGGER.debug("HVAC mode set successfully")
-        except Exception as e:
-            _LOGGER.error("Failed to set HVAC mode: %s", e)
-            raise
+        else:
+            _LOGGER.info(
+                "[%s] Setting HVAC mode to %s (current: %s)",
+                self.target_entity,
+                source_hvac_mode,
+                current_target_hvac_mode,
+            )
+            try:
+                await self.hass.services.async_call(
+                    CLIMATE_DOMAIN,
+                    SERVICE_SET_HVAC_MODE,
+                    {
+                        ATTR_ENTITY_ID: self.target_entity,
+                        ATTR_HVAC_MODE: source_hvac_mode,
+                    },
+                    blocking=True,
+                )
+                _LOGGER.debug("HVAC mode set successfully")
+            except Exception as e:
+                _LOGGER.error("Failed to set HVAC mode: %s", e)
+                raise
 
         # Calculate temperature offset if enabled
         temp_offset = 0.0
