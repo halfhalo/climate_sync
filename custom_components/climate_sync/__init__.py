@@ -685,19 +685,34 @@ class ClimateSyncManager:
             elif temp_high is not None:
                 service_data["target_temp_high"] = temp_high
 
-            _LOGGER.info(
-                "[%s] Setting auto mode temps: low=%s, high=%s (current: low=%s, high=%s)",
-                self.target_entity,
-                service_data.get("target_temp_low"),
-                service_data.get("target_temp_high"),
-                current_target_temp_low,
-                current_target_temp_high,
-            )
+            # Check if setpoints are actually changing
+            new_low = service_data.get("target_temp_low")
+            new_high = service_data.get("target_temp_high")
+            temps_unchanged = (new_low == current_target_temp_low and new_high == current_target_temp_high)
+
+            if temps_unchanged:
+                _LOGGER.debug(
+                    "[%s] Auto mode temps unchanged: low=%s, high=%s - skipping update",
+                    self.target_entity,
+                    new_low,
+                    new_high,
+                )
+                # Clear service_data to skip the service call
+                service_data = {ATTR_ENTITY_ID: self.target_entity}
+            else:
+                _LOGGER.info(
+                    "[%s] Setting auto mode temps: low=%s, high=%s (current: low=%s, high=%s)",
+                    self.target_entity,
+                    new_low,
+                    new_high,
+                    current_target_temp_low,
+                    current_target_temp_high,
+                )
         elif source_target_temp is not None:
             # Single setpoint modes (heat, cool)
             calculated_temp = source_target_temp + temp_offset
             clamped_temp = max(target_min_temp, min(target_max_temp, calculated_temp))
-            service_data[ATTR_TEMPERATURE] = clamped_temp
+
             if clamped_temp != calculated_temp:
                 _LOGGER.warning(
                     "Clamped temperature from %.1f%s to %.1f%s (range: %.1f-%.1f%s)",
@@ -709,17 +724,28 @@ class ClimateSyncManager:
                     target_max_temp,
                     temp_unit,
                 )
-            _LOGGER.info(
-                "[%s] Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s, current: %s)",
-                self.target_entity,
-                service_data[ATTR_TEMPERATURE],
-                temp_unit,
-                source_target_temp,
-                temp_unit,
-                temp_offset,
-                temp_unit,
-                current_target_temp,
-            )
+
+            # Check if temperature is actually changing
+            if clamped_temp == current_target_temp:
+                _LOGGER.debug(
+                    "[%s] Target temp unchanged: %.1f%s - skipping update",
+                    self.target_entity,
+                    clamped_temp,
+                    temp_unit,
+                )
+            else:
+                service_data[ATTR_TEMPERATURE] = clamped_temp
+                _LOGGER.info(
+                    "[%s] Setting target temp: %.1f%s (source: %.1f%s, offset: %.1f%s, current: %s)",
+                    self.target_entity,
+                    service_data[ATTR_TEMPERATURE],
+                    temp_unit,
+                    source_target_temp,
+                    temp_unit,
+                    temp_offset,
+                    temp_unit,
+                    current_target_temp,
+                )
         else:
             _LOGGER.debug("No temperature setpoint available from source")
 
